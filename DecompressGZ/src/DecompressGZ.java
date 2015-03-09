@@ -79,13 +79,15 @@ public class DecompressGZ {
      }
   }
   
-  public static void computeFilesStructure(String input_directory, Configuration conf) throws IOException, InterruptedException {
+  public static int computeFilesStructure(String input_directory, 
+		  							       String output_directory,
+		  									Configuration conf) throws IOException, InterruptedException {
 	  // List all files in the input directory
 	  FileSystem fs = FileSystem.get(URI.create(input_directory), conf);
 	  FileStatus[] status = fs.listStatus(new Path(input_directory));
 	  Path[] listedPaths = FileUtil.stat2Paths(status);
 	  
-	  Path outFile = new Path(input_directory, "input.temporary");
+	  Path outFile = new Path("/tmp/input.temporary");
 	  if (fs.exists(outFile)) {
 		  System.out.println("File exitsts");
 		  fs.delete(outFile, true);
@@ -103,6 +105,9 @@ public class DecompressGZ {
 	  
 	  out.close();
 	  fs.close();
+	  
+	  //TODO change this
+	  return 1;
   }
 
   public static void main(String[] args) throws Exception {
@@ -111,7 +116,8 @@ public class DecompressGZ {
 	}
 
     Configuration conf = new Configuration();
-	computeFilesStructure(args[0], conf);
+    conf.set("mapreduce.fileoutputcommitter.marksuccessfuljobs", "false");
+	int linespermap = computeFilesStructure(args[0], args[1], conf);
 		
     Job job = Job.getInstance(conf, "decompress");
     job.setJarByClass(DecompressGZ.class);
@@ -120,7 +126,7 @@ public class DecompressGZ {
     job.setInputFormatClass(NLineInputFormat.class);
 	NLineInputFormat.addInputPath(job, new Path(args[0]));
 	job.getConfiguration().setInt(
-			"mapreduce.input.lineinputformat.linespermap", 1);
+			"mapreduce.input.lineinputformat.linespermap", linespermap);
 	
     job.setNumReduceTasks(0);
     LazyOutputFormat.setOutputFormatClass(job, TextOutputFormat.class);
@@ -129,7 +135,7 @@ public class DecompressGZ {
   
     // Path workpath = FileOutputFormat.getOutputPath(context);
     // FileInputFormat.setInputPaths(job, new Path(workpath, "*.temporary"));
-    FileInputFormat.setInputPaths(job, new Path("/Users/alex/compressed_files_from_original/*.txt"));
+    FileInputFormat.setInputPaths(job, new Path("/tmp/input.temporary"));
     FileOutputFormat.setOutputPath(job, new Path(args[1]));
     System.exit(job.waitForCompletion(true) ? 0 : 1);
   }
