@@ -6,6 +6,7 @@ import java.io.OutputStream;
 import java.net.URI;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -23,8 +24,12 @@ import org.apache.hadoop.mapreduce.lib.input.NLineInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.LazyOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
+import org.apache.hadoop.util.Tool;
+import org.apache.hadoop.util.ToolRunner;
 
-public class DecompressGZ {
+
+	 
+public class DecompressGZ extends Configured implements Tool {
 
   public static class DecompressMapper
        extends Mapper<Object, Text, Text, IntWritable>{
@@ -79,6 +84,7 @@ public class DecompressGZ {
      }
   }
   
+  
   public static int computeFilesStructure(String input_directory, 
 		  							       String output_directory,
 		  									Configuration conf) throws IOException, InterruptedException {
@@ -107,15 +113,16 @@ public class DecompressGZ {
 	  fs.close();
 	  
 	  //TODO change this
-	  return 1;
+	  return 2;
   }
 
-  public static void main(String[] args) throws Exception {
+  @Override
+  public int run(String[] args) throws Exception {
 	if (args.length != 2) {
 			System.out.printf("Two parameters are required - <input dir> <output dir>\n");
 	}
 
-    Configuration conf = new Configuration();
+    Configuration conf = this.getConf();
     conf.set("mapreduce.fileoutputcommitter.marksuccessfuljobs", "false");
 	int linespermap = computeFilesStructure(args[0], args[1], conf);
 		
@@ -137,7 +144,20 @@ public class DecompressGZ {
     // FileInputFormat.setInputPaths(job, new Path(workpath, "*.temporary"));
     FileInputFormat.setInputPaths(job, new Path("/tmp/input.temporary"));
     FileOutputFormat.setOutputPath(job, new Path(args[1]));
-    System.exit(job.waitForCompletion(true) ? 0 : 1);
+    
+   /** Path outFile = new Path("/tmp/input.temporary");
+	FileSystem fs = FileSystem.get(URI.create(args[0]), conf);
+	if (fs.exists(outFile)) {
+		  System.out.println("File exists, deleting");
+		  fs.delete(outFile, true);
+	}**/
+ //   System.exit(job.waitForCompletion(true) ? 0 : 1);
+    return job.waitForCompletion(true) ? 0 : 1;
+  }
+  
+  public static void main(String[] args) throws Exception {
+      int res = ToolRunner.run(new Configuration(), new DecompressGZ(), args);
+      System.exit(res);
   }
 }
 
