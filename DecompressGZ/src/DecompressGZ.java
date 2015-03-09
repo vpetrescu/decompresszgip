@@ -125,11 +125,13 @@ public class DecompressGZ extends Configured implements Tool {
 	  public ArrayList<String> filenames;
 	  FileGroup(FileGroup fg1, FileGroup fg2) {
 		  group_file_size = fg1.group_file_size + fg2.group_file_size;
+		  filenames = new ArrayList<String>();
 		  filenames.addAll(fg1.filenames);
 		  filenames.addAll(fg2.filenames);
 	  }
 	  FileGroup(long fsize, String filename) {
 		  group_file_size = fsize;
+		  filenames = new ArrayList<String>();
 		  filenames.add(filename);
 	  }
   }
@@ -157,7 +159,7 @@ public class DecompressGZ extends Configured implements Tool {
 			  fileGroupQueue.add(new FileGroup(status[i].getLen(), listedPaths[i].toUri().toString()));
 	   }
 	   
-	   while (fileGroupQueue.size() > 10 && fileGroupQueue.size() > 2) {
+	   while (fileGroupQueue.size() > 5 && fileGroupQueue.size() > 2) {
 		   FileGroup fg1 = fileGroupQueue.poll();
 		   FileGroup fg2 = fileGroupQueue.poll();
 		   fileGroupQueue.add(new FileGroup(fg1, fg2));
@@ -197,8 +199,9 @@ public class DecompressGZ extends Configured implements Tool {
 
     Configuration conf = this.getConf();
     conf.set("mapreduce.fileoutputcommitter.marksuccessfuljobs", "false");
-	int linespermap = computeFilesStructure(args[0], args[1], conf);
-		
+	int linespermap = computeComplexFilesStructure(args[0], args[1], conf);
+	System.out.printf("lines per map %d\n", linespermap);
+	
     Job job = Job.getInstance(conf, "decompress");
     job.setJarByClass(DecompressGZ.class);
     job.setMapperClass(DecompressMapper.class);
