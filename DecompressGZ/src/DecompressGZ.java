@@ -6,6 +6,7 @@ import java.io.OutputStream;
 import java.net.URI;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
@@ -83,12 +84,24 @@ public class DecompressGZ {
 	  FileSystem fs = FileSystem.get(URI.create(input_directory), conf);
 	  FileStatus[] status = fs.listStatus(new Path(input_directory));
 	  Path[] listedPaths = FileUtil.stat2Paths(status);
+	  
+	  Path outFile = new Path(input_directory, "input.temporary");
+	  if (fs.exists(outFile)) {
+		  System.out.println("File exitsts");
+		  fs.delete(outFile, true);
+	  }
+	  FSDataOutputStream out = fs.create(outFile);
+	  
 	  for (int i = 0; i < listedPaths.length; i++)  {
+		  out.writeBytes(listedPaths[i].toUri().toString());
+		  out.writeBytes("\n");
 		//  System.out.println(listedPaths[i]);
 		//  System.out.printf("Size if %d\n", status[i].getLen());
 	  }
 	  // Create a union file structure with size ->filename
 	  // Write file to working directory with value .temporary
+	  
+	  out.close();
 	  fs.close();
   }
 
