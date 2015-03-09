@@ -6,7 +6,6 @@ import java.io.OutputStream;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.List;
 import java.util.PriorityQueue;
 
 import org.apache.hadoop.conf.Configuration;
@@ -41,39 +40,41 @@ public class DecompressGZ extends Configured implements Tool {
     public void map(Object key, Text value, Context context
             ) throws IOException, InterruptedException {
     	//TODO iterate here over keys
-    	// full path to file.gz	
+    	// full path to file.gz
     	String uri = value.toString();
-    	Configuration conf = new Configuration();
-    	FileSystem fs = FileSystem.get(URI.create(uri), conf);
-    	Path inputPath = new Path(uri);
-    	CompressionCodecFactory factory = new CompressionCodecFactory(conf);
-    	// the correct codec will be discovered by the extension of the file
-    	CompressionCodec codec = factory.getCodec(inputPath);
+    	if (uri.equals("NONE") == false) {
+    		Configuration conf = new Configuration();
+    		FileSystem fs = FileSystem.get(URI.create(uri), conf);
+    		Path inputPath = new Path(uri);
+    		CompressionCodecFactory factory = new CompressionCodecFactory(conf);
+    		// the correct codec will be discovered by the extension of the file
+    		CompressionCodec codec = factory.getCodec(inputPath);
 
-    	if (codec == null) {
-    		System.err.println("No codec found for " + uri);
-    		System.exit(1);
-    	}
+    		if (codec == null) {
+    			System.err.println("No codec found for " + uri);
+    			System.exit(1);
+    		}
 
-    	// remove the .gz extension
-        File userFile = new File(uri);
-        String basename = stripExtension(userFile.getName());
-        Path workpath = FileOutputFormat.getOutputPath(context);
-        Path pathoutputUri= new Path(workpath, basename);
+    		// remove the .gz extension
+    		File userFile = new File(uri);
+    		String basename = stripExtension(userFile.getName());
+    		Path workpath = FileOutputFormat.getOutputPath(context);
+    		Path pathoutputUri= new Path(workpath, basename);
         
-        InputStream in = null;
-        OutputStream out = null;
-        if (fs.exists(inputPath)) {
-        	try {
-        		System.out.printf("Input path is %s, %s\n", uri, basename);
-        		in = codec.createInputStream(fs.open(inputPath));
-        		out = fs.create(pathoutputUri);
-        		IOUtils.copyBytes(in, out, conf);
-        	} finally {
-        		in.close();
-          		out.close();
-        	}
-        }
+    		InputStream in = null;
+    		OutputStream out = null;
+    		if (fs.exists(inputPath)) {
+    			try {
+    				System.out.printf("Input path is %s, %s\n", uri, basename);
+    				in = codec.createInputStream(fs.open(inputPath));
+    				out = fs.create(pathoutputUri);
+    				IOUtils.copyBytes(in, out, conf);
+    			} finally {
+    				in.close();
+    				out.close();
+    			}
+    		}
+    	}
      }
      // Alternatively use org.apache.commons.io.FilenameUtils 
      static String stripExtension (String str) {
@@ -87,7 +88,6 @@ public class DecompressGZ extends Configured implements Tool {
         return str.substring(0, pos);
      }
   }
-  
   
   public static int computeFilesStructure(String input_directory, 
 		  							       String output_directory,
@@ -103,7 +103,6 @@ public class DecompressGZ extends Configured implements Tool {
 		  fs.delete(outFile, true);
 	  }
 	  FSDataOutputStream out = fs.create(outFile);
-	  
 	  for (int i = 0; i < listedPaths.length; i++)  {
 		  out.writeBytes(listedPaths[i].toUri().toString());
 		  out.writeBytes("\n");
@@ -112,11 +111,8 @@ public class DecompressGZ extends Configured implements Tool {
 	  }
 	  // Create a union file structure with size ->filename
 	  // Write file to working directory with value .temporary
-	  
 	  out.close();
 	  fs.close();
-	  
-	  //TODO change this
 	  return 2;
   }
 
@@ -159,7 +155,7 @@ public class DecompressGZ extends Configured implements Tool {
 			  fileGroupQueue.add(new FileGroup(status[i].getLen(), listedPaths[i].toUri().toString()));
 	   }
 	   
-	   while (fileGroupQueue.size() > 5 && fileGroupQueue.size() > 2) {
+	   while (fileGroupQueue.size() > 7 && fileGroupQueue.size() > 2) {
 		   FileGroup fg1 = fileGroupQueue.poll();
 		   FileGroup fg2 = fileGroupQueue.poll();
 		   fileGroupQueue.add(new FileGroup(fg1, fg2));
@@ -221,12 +217,12 @@ public class DecompressGZ extends Configured implements Tool {
     FileInputFormat.setInputPaths(job, new Path("/tmp/input.temporary"));
     FileOutputFormat.setOutputPath(job, new Path(args[1]));
     
-   /** Path outFile = new Path("/tmp/input.temporary");
+    Path outFile = new Path("/tmp/input.temporary");
 	FileSystem fs = FileSystem.get(URI.create(args[0]), conf);
 	if (fs.exists(outFile)) {
 		  System.out.println("File exists, deleting");
-		  fs.delete(outFile, true);
-	}**/
+		  fs.deleteOnExit(outFile);
+	}
  //   System.exit(job.waitForCompletion(true) ? 0 : 1);
     return job.waitForCompletion(true) ? 0 : 1;
   }
