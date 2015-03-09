@@ -4,6 +4,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.PriorityQueue;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
@@ -59,16 +63,16 @@ public class DecompressGZ extends Configured implements Tool {
         
         InputStream in = null;
         OutputStream out = null;
-        try {
-        	
-          System.out.printf("Input path is %s, %s\n", uri, basename);
-          in = codec.createInputStream(fs.open(inputPath));
-          out = fs.create(pathoutputUri);
-          IOUtils.copyBytes(in, out, conf);
-        } finally {
-          
-          in.close();
-          out.close();
+        if (fs.exists(inputPath)) {
+        	try {
+        		System.out.printf("Input path is %s, %s\n", uri, basename);
+        		in = codec.createInputStream(fs.open(inputPath));
+        		out = fs.create(pathoutputUri);
+        		IOUtils.copyBytes(in, out, conf);
+        	} finally {
+        		in.close();
+          		out.close();
+        	}
         }
      }
      // Alternatively use org.apache.commons.io.FilenameUtils 
@@ -116,6 +120,75 @@ public class DecompressGZ extends Configured implements Tool {
 	  return 2;
   }
 
+  public static class FileGroup {
+	  public long group_file_size;
+	  public ArrayList<String> filenames;
+	  FileGroup(FileGroup fg1, FileGroup fg2) {
+		  group_file_size = fg1.group_file_size + fg2.group_file_size;
+		  filenames.addAll(fg1.filenames);
+		  filenames.addAll(fg2.filenames);
+	  }
+	  FileGroup(long fsize, String filename) {
+		  group_file_size = fsize;
+		  filenames.add(filename);
+	  }
+  }
+  public static int computeComplexFilesStructure(String input_directory, 
+		       String output_directory,
+				Configuration conf) throws IOException, InterruptedException {
+	  // List all files in the input directory
+	  FileSystem fs = FileSystem.get(URI.create(input_directory), conf);
+	  FileStatus[] status = fs.listStatus(new Path(input_directory));
+	  Path[] listedPaths = FileUtil.stat2Paths(status);
+
+	  Path outFile = new Path("/tmp/input.temporary");
+	  if (fs.exists(outFile)) {
+		  System.out.println("File exitsts");
+		  fs.delete(outFile, true);
+	  }
+
+	  // Create a union file structure with size ->filename
+	   PriorityQueue<FileGroup> fileGroupQueue = new PriorityQueue<FileGroup>(listedPaths.length, new Comparator<FileGroup>() {
+	        public int compare(FileGroup fg1, FileGroup fg2) {
+	            return (int) (fg1.group_file_size - fg2.group_file_size);
+	        }
+	    });
+	   for (int i = 0; i < listedPaths.length; i++)  {
+			  fileGroupQueue.add(new FileGroup(status[i].getLen(), listedPaths[i].toUri().toString()));
+	   }
+	   
+	   while (fileGroupQueue.size() > 10 && fileGroupQueue.size() > 2) {
+		   FileGroup fg1 = fileGroupQueue.poll();
+		   FileGroup fg2 = fileGroupQueue.poll();
+		   fileGroupQueue.add(new FileGroup(fg1, fg2));
+	   }
+	  // Write file to working directory with value .temporary
+	   PriorityQueue<FileGroup> saved_fileGroupQueue = new PriorityQueue<FileGroup>(fileGroupQueue);
+	   int nbrlines = 0;
+	   while (fileGroupQueue.size() > 0) {
+		   FileGroup fg1 = fileGroupQueue.poll();
+		   if (fg1.filenames.size() > nbrlines)
+			   nbrlines = fg1.filenames.size();
+	   }
+	   FSDataOutputStream out = fs.create(outFile);
+
+	   while (saved_fileGroupQueue.size() > 0) {
+		   FileGroup fg1 = saved_fileGroupQueue.poll();
+		   for (int i = 0; i < fg1.filenames.size(); ++i) {
+			   out.writeBytes(fg1.filenames.get(i));
+			   out.writeBytes("\n");
+		   }
+		   for (int i = fg1.filenames.size(); i < nbrlines; ++i) {
+			   out.writeBytes("NONE\n");
+		   }
+	   }
+	   
+	  out.close();
+	  fs.close();
+
+	  return nbrlines;
+  }
+  
   @Override
   public int run(String[] args) throws Exception {
 	if (args.length != 2) {
