@@ -6,7 +6,9 @@ import java.io.OutputStream;
 import java.net.URI;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.IntWritable;
@@ -45,7 +47,7 @@ public class DecompressGZ {
 
     	// remove the .gz extension
         File userFile = new File(uri);
-        String basename = userFile.getName();
+        String basename = stripExtension(userFile.getName());
         Path workpath = FileOutputFormat.getOutputPath(context);
         Path pathoutputUri= new Path(workpath, basename);
         
@@ -75,14 +77,29 @@ public class DecompressGZ {
         return str.substring(0, pos);
      }
   }
-
+  
+  public static void computeFilesStructure(String input_directory, Configuration conf) throws IOException, InterruptedException {
+	  // List all files in the input directory
+	  FileSystem fs = FileSystem.get(URI.create(input_directory), conf);
+	  FileStatus[] status = fs.listStatus(new Path(input_directory));
+	  Path[] listedPaths = FileUtil.stat2Paths(status);
+	  for (int i = 0; i < listedPaths.length; i++)  {
+		//  System.out.println(listedPaths[i]);
+		//  System.out.printf("Size if %d\n", status[i].getLen());
+	  }
+	  // Create a union file structure with size ->filename
+	  // Write file to working directory with value .temporary
+	  fs.close();
+  }
 
   public static void main(String[] args) throws Exception {
-		if (args.length != 2) {
+	if (args.length != 2) {
 			System.out.printf("Two parameters are required - <input dir> <output dir>\n");
-		}
- 
+	}
+
     Configuration conf = new Configuration();
+	computeFilesStructure(args[0], conf);
+		
     Job job = Job.getInstance(conf, "decompress");
     job.setJarByClass(DecompressGZ.class);
     job.setMapperClass(DecompressMapper.class);
@@ -96,6 +113,9 @@ public class DecompressGZ {
     LazyOutputFormat.setOutputFormatClass(job, TextOutputFormat.class);
     job.setOutputKeyClass(Text.class);
     job.setOutputValueClass(IntWritable.class);
+  
+    // Path workpath = FileOutputFormat.getOutputPath(context);
+    // FileInputFormat.setInputPaths(job, new Path(workpath, "*.temporary"));
     FileInputFormat.setInputPaths(job, new Path("/Users/alex/compressed_files_from_original/*.txt"));
     FileOutputFormat.setOutputPath(job, new Path(args[1]));
     System.exit(job.waitForCompletion(true) ? 0 : 1);
